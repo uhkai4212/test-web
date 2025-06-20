@@ -408,80 +408,90 @@
     </div>
 
     <script>
-        // Note persistence system - stores data in memory for the session
+        // Note storage system using localStorage
         let notes = [];
+        const STORAGE_KEY = 'scriptynote_notes';
         
-        // Initialize notes from data store or use defaults
-        function initializeNotes() {
-            const storedNotes = getNotes();
-            if (storedNotes.length === 0) {
-                // Default sample notes
-                notes = [
-                    {
-                        id: 1,
-                        title: "Welcome to ScriptyNote",
-                        content: "This is your first note! You can create, search, and organize all your thoughts here. The interface is designed to be clean and intuitive.",
-                        user: "System",
-                        date: new Date('2025-06-20T10:00:00')
-                    },
-                    {
-                        id: 2,
-                        title: "Project Ideas",
-                        content: "Build a modern web application with React and Node.js. Focus on user experience and performance optimization.",
-                        user: "Alex Chen",
-                        date: new Date('2025-06-19T15:30:00')
-                    },
-                    {
-                        id: 3,
-                        title: "Meeting Notes",
-                        content: "Discussed Q3 roadmap, new feature implementations, and team restructuring. Action items: Review designs by Friday.",
-                        user: "Sarah Johnson",
-                        date: new Date('2025-06-18T14:15:00')
-                    },
-                    {
-                        id: 4,
-                        title: "Learning Goals",
-                        content: "Master advanced CSS animations, learn Three.js for 3D web experiences, and improve TypeScript skills.",
-                        user: "Mike Rodriguez",
-                        date: new Date('2025-06-17T09:45:00')
-                    },
-                    {
-                        id: 5,
-                        title: "Recipe Collection",
-                        content: "Tried the new pasta recipe today - amazing! Need to adjust seasoning next time. Add more garlic and herbs.",
-                        user: "Emma Wilson",
-                        date: new Date('2025-06-16T19:20:00')
-                    }
-                ];
-                saveNotes();
-            } else {
-                notes = storedNotes;
+        // Default sample notes
+        const defaultNotes = [
+            {
+                id: 1,
+                title: "Welcome to ScriptyNote",
+                content: "This is your first note! You can create, search, and organize all your thoughts here. The interface is designed to be clean and intuitive.",
+                user: "System",
+                date: new Date('2025-06-20T10:00:00').toISOString()
+            },
+            {
+                id: 2,
+                title: "Project Ideas",
+                content: "Build a modern web application with React and Node.js. Focus on user experience and performance optimization.",
+                user: "Alex Chen",
+                date: new Date('2025-06-19T15:30:00').toISOString()
+            },
+            {
+                id: 3,
+                title: "Meeting Notes",
+                content: "Discussed Q3 roadmap, new feature implementations, and team restructuring. Action items: Review designs by Friday.",
+                user: "Sarah Johnson",
+                date: new Date('2025-06-18T14:15:00').toISOString()
+            },
+            {
+                id: 4,
+                title: "Learning Goals",
+                content: "Master advanced CSS animations, learn Three.js for 3D web experiences, and improve TypeScript skills.",
+                user: "Mike Rodriguez",
+                date: new Date('2025-06-17T09:45:00').toISOString()
+            },
+            {
+                id: 5,
+                title: "Recipe Collection",
+                content: "Tried the new pasta recipe today - amazing! Need to adjust seasoning next time. Add more garlic and herbs.",
+                user: "Emma Wilson",
+                date: new Date('2025-06-16T19:20:00').toISOString()
             }
-        }
+        ];
 
-        // In-memory storage system
-        let persistentStorage = new Map();
-
-        function saveNotes() {
-            const notesData = notes.map(note => ({
-                ...note,
-                date: note.date.toISOString()
-            }));
-            persistentStorage.set('scriptyNotes', JSON.stringify(notesData));
-        }
-
-        function getNotes() {
-            const stored = persistentStorage.get('scriptyNotes');
-            if (!stored) return [];
-            
+        // Load notes from localStorage
+        function loadNotes() {
             try {
-                const parsed = JSON.parse(stored);
-                return parsed.map(note => ({
+                const stored = localStorage.getItem(STORAGE_KEY);
+                if (stored) {
+                    const parsedNotes = JSON.parse(stored);
+                    // Convert date strings back to Date objects
+                    notes = parsedNotes.map(note => ({
+                        ...note,
+                        date: new Date(note.date)
+                    }));
+                } else {
+                    // First time user - initialize with default notes
+                    notes = defaultNotes.map(note => ({
+                        ...note,
+                        date: new Date(note.date)
+                    }));
+                    saveNotes();
+                }
+            } catch (error) {
+                console.error('Error loading notes:', error);
+                // Fallback to default notes if localStorage is corrupted
+                notes = defaultNotes.map(note => ({
                     ...note,
                     date: new Date(note.date)
                 }));
-            } catch (e) {
-                return [];
+            }
+        }
+
+        // Save notes to localStorage
+        function saveNotes() {
+            try {
+                // Convert Date objects to ISO strings for storage
+                const notesToStore = notes.map(note => ({
+                    ...note,
+                    date: note.date.toISOString()
+                }));
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(notesToStore));
+            } catch (error) {
+                console.error('Error saving notes:', error);
+                // Could show user notification here
             }
         }
 
@@ -502,22 +512,41 @@
 
         function renderNotes(notesToRender = notes) {
             const notesGrid = document.getElementById('notesGrid');
-            const recentNotes = notesToRender.slice(0, 30);
+            
+            if (notesToRender.length === 0) {
+                notesGrid.innerHTML = `
+                    <div style="grid-column: 1 / -1; text-align: center; padding: 2rem; color: #666;">
+                        <p>No notes found. Create your first note!</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Sort notes by date (newest first)
+            const sortedNotes = [...notesToRender].sort((a, b) => new Date(b.date) - new Date(a.date));
+            const recentNotes = sortedNotes.slice(0, 50); // Show up to 50 notes
             
             notesGrid.innerHTML = recentNotes.map((note, index) => `
-                <div class="note-card" style="animation-delay: ${index * 0.1}s">
+                <div class="note-card" style="animation-delay: ${index * 0.05}s">
                     <div class="note-header">
-                        <div class="note-user">${note.user}</div>
+                        <div class="note-user">${escapeHtml(note.user)}</div>
                         <div class="note-date">${formatDate(note.date)}</div>
                     </div>
-                    <div class="note-title">${note.title}</div>
-                    <div class="note-content">${note.content}</div>
+                    <div class="note-title">${escapeHtml(note.title)}</div>
+                    <div class="note-content">${escapeHtml(note.content)}</div>
                 </div>
             `).join('');
         }
 
+        // Escape HTML to prevent XSS
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
         function searchNotes() {
-            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
             
             if (!searchTerm) {
                 renderNotes();
@@ -537,6 +566,10 @@
         function openModal() {
             document.getElementById('noteModal').style.display = 'flex';
             document.body.style.overflow = 'hidden';
+            // Focus on the title input
+            setTimeout(() => {
+                document.getElementById('noteTitle').focus();
+            }, 100);
         }
 
         function closeModal() {
@@ -548,30 +581,49 @@
         function createNote(event) {
             event.preventDefault();
             
-            const title = document.getElementById('noteTitle').value;
-            const content = document.getElementById('noteContent').value;
-            const user = document.getElementById('noteUser').value;
+            const title = document.getElementById('noteTitle').value.trim();
+            const content = document.getElementById('noteContent').value.trim();
+            const user = document.getElementById('noteUser').value.trim();
+            
+            // Validation
+            if (!title || !content || !user) {
+                alert('Please fill in all fields');
+                return;
+            }
+            
+            // Generate new ID
+            const newId = notes.length > 0 ? Math.max(...notes.map(n => n.id)) + 1 : 1;
             
             const newNote = {
-                id: Math.max(...notes.map(n => n.id), 0) + 1,
+                id: newId,
                 title,
                 content,
                 user,
                 date: new Date()
             };
             
+            // Add to beginning of array (newest first)
             notes.unshift(newNote);
-            saveNotes(); // Persist the new note
+            
+            // Save to localStorage
+            saveNotes();
+            
+            // Re-render notes
             renderNotes();
+            
+            // Close modal
             closeModal();
             
-            // Add a subtle success animation
-            const firstCard = document.querySelector('.note-card');
-            if (firstCard) {
-                firstCard.style.animation = 'none';
-                firstCard.offsetHeight; // Trigger reflow
-                firstCard.style.animation = 'noteAppear 0.6s ease-out, buttonPulse 1s ease-out';
-            }
+            // Add success animation to the first card
+            setTimeout(() => {
+                const firstCard = document.querySelector('.note-card');
+                if (firstCard) {
+                    firstCard.style.background = 'rgba(120, 119, 198, 0.1)';
+                    setTimeout(() => {
+                        firstCard.style.background = 'rgba(255, 255, 255, 0.03)';
+                    }, 1000);
+                }
+            }, 100);
         }
 
         // Event listeners
@@ -592,9 +644,22 @@
             }
         });
 
-        // Initialize the page
-        initializeNotes();
-        renderNotes();
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', function() {
+            loadNotes();
+            renderNotes();
+            
+            // Clear search when page loads
+            document.getElementById('searchInput').value = '';
+        });
+
+        // Handle page visibility changes to refresh notes
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) {
+                loadNotes();
+                renderNotes();
+            }
+        });
     </script>
 </body>
 </html>
