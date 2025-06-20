@@ -370,6 +370,18 @@
             margin: 0 auto;
         }
 
+        .empty-state {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 3rem;
+            color: #666;
+        }
+
+        .empty-state h3 {
+            margin-bottom: 1rem;
+            color: #999;
+        }
+
         @keyframes fadeInDown {
             from {
                 opacity: 0;
@@ -545,79 +557,18 @@
         let selectedNoteId = null;
         let isLoading = true;
 
-        // Update status indicator
-        function updateStatus(status, text) {
-            const indicator = document.getElementById('statusIndicator');
-            const statusText = document.getElementById('statusText');
-            
-            indicator.className = `status-indicator ${status}`;
-            statusText.textContent = text;
-        }
-
-        // Load notes from Firebase
-        function loadNotesFromFirebase() {
-            updateStatus('loading', 'Loading global notes...');
-            document.getElementById('loadingSpinner').style.display = 'block';
-            
-            const notesRef = ref(database, 'notes');
-            const notesQuery = query(notesRef, orderByChild('timestamp'), limitToLast(100));
-            
-            onValue(notesQuery, (snapshot) => {
-                try {
-                    const data = snapshot.val();
-                    notes = [];
-                    
-                    if (data) {
-                        Object.keys(data).forEach(key => {
-                            const note = data[key];
-                            notes.push({
-                                id: key,
-                                title: note.title,
-                                content: note.content,
-                                user: note.user,
-                                date: new Date(note.timestamp),
-                                created: new Date(note.timestamp)
-                            });
-                        });
-                    }
-                    
-                    // Sort by newest first
-                    notes.sort((a, b) => b.date - a.date);
-                    
-                    renderNotes();
-                    updateStatus('', `🌍 ${notes.length} global notes loaded`);
-                    document.getElementById('loadingSpinner').style.display = 'none';
-                    isLoading = false;
-                    
-                    console.log(`Loaded ${notes.length} notes from Firebase`);
-                } catch (error) {
-                    console.error('Error processing notes:', error);
-                    updateStatus('error', 'Failed to load notes');
-                    document.getElementById('loadingSpinner').style.display = 'none';
-                }
-            }, (error) => {
-                console.error('Firebase error:', error);
-                updateStatus('error', 'Connection failed');
-                document.getElementById('loadingSpinner').style.display = 'none';
-            });
-        }
-
-        // Save note to Firebase
-        function saveNoteToFirebase(noteData) {
-            const notesRef = ref(database, 'notes');
-            
-            const firebaseNote = {
-                title: noteData.title,
-                content: noteData.content,
-                user: noteData.user,
-                timestamp: Date.now(),
-                serverTimestamp: serverTimestamp()
-            };
-            
-            return push(notesRef, firebaseNote);
+        // Utility functions
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text || '';
+            return div.innerHTML;
         }
 
         function formatDate(date) {
+            if (!date || !(date instanceof Date)) {
+                return 'Unknown date';
+            }
+            
             const now = new Date();
             const diffTime = Math.abs(now - date);
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -636,56 +587,45 @@
         }
 
         function truncateText(text, maxLength = 100) {
+            if (!text) return '';
             if (text.length <= maxLength) return text;
             return text.substring(0, maxLength) + '…';
         }
 
-        function copyNoteContent(noteId) {
-            const note = notes.find(n => n.id === noteId);
-            if (!note) return;
-
-            navigator.clipboard.writeText(`${note.title}\n\n${note.content}\n\n— ${note.user}`).then(() => {
-                const copyButton = document.querySelector(`[data-note-id="${noteId}"] .copy-button`);
-                if (copyButton) {
-                    const originalHTML = copyButton.innerHTML;
-                    copyButton.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20,6 9,17 4,12"></polyline></svg>';
-                    copyButton.classList.add('copied');
-                    
-                    setTimeout(() => {
-                        copyButton.innerHTML = originalHTML;
-                        copyButton.classList.remove('copied');
-                    }, 2000);
-                }
-            }).catch(err => {
-                console.error('Failed to copy:', err);
-            });
-        }
-
-        function selectNote(noteId, event) {
-            if (event.target.classList.contains('copy-button')) {
-                return;
+        // Update status indicator
+        function updateStatus(status, text) {
+            const indicator = document.getElementById('statusIndicator');
+            const statusText = document.getElementById('statusText');
+            
+            if (indicator) {
+                indicator.className = `status-indicator ${status}`;
             }
-
-            document.querySelectorAll('.note-card').forEach(card => {
-                card.classList.remove('selected');
-            });
-
-            const noteCard = event.currentTarget;
-            noteCard.classList.add('selected');
-            selectedNoteId = noteId;
+            if (statusText) {
+                statusText.textContent = text;
+            }
         }
 
+        // Render notes function
         function renderNotes(notesToRender = notes) {
             const notesGrid = document.getElementById('notesGrid');
             
-            if (isLoading) {
+            if (!notesGrid) {
+                console.error('Notes grid element not found');
                 return;
             }
             
+            // Hide loading spinner
+            const loadingSpinner = document.getElementById('loadingSpinner');
+            if (loadingSpinner) {
+                loadingSpinner.style.display = 'none';
+            }
+            
+            console.log('Rendering notes:', notesToRender.length);
+            
             if (notesToRender.length === 0) {
                 notesGrid.innerHTML = `
-                    <div style="grid-column: 1 / -1; text-align: center; padding: 3rem; color: #666;">
-                        <h3 style="margin-bottom: 1rem; color: #999;">No notes found</h3>
+                    <div class="empty-state">
+                        <h3>No notes found</h3>
                         <p>Be the first to share a note with the world! 🌍</p>
                     </div>
                 `;
@@ -710,12 +650,119 @@
             `).join('');
         }
 
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
+        // Load notes from Firebase
+        function loadNotesFromFirebase() {
+            console.log('Loading notes from Firebase...');
+            updateStatus('loading', 'Loading global notes...');
+            
+            const loadingSpinner = document.getElementById('loadingSpinner');
+            if (loadingSpinner) {
+                loadingSpinner.style.display = 'block';
+            }
+            
+            const notesRef = ref(database, 'notes');
+            const notesQuery = query(notesRef, orderByChild('timestamp'), limitToLast(100));
+            
+            onValue(notesQuery, (snapshot) => {
+                try {
+                    console.log('Firebase snapshot received');
+                    const data = snapshot.val();
+                    notes = [];
+                    
+                    if (data) {
+                        console.log('Processing Firebase data:', Object.keys(data).length, 'notes');
+                        Object.keys(data).forEach(key => {
+                            const note = data[key];
+                            if (note && note.title && note.content && note.user) {
+                                const noteDate = new Date(note.timestamp || Date.now());
+                                notes.push({
+                                    id: key,
+                                    title: note.title,
+                                    content: note.content,
+                                    user: note.user,
+                                    date: noteDate,
+                                    created: noteDate
+                                });
+                            }
+                        });
+                    }
+                    
+                    // Sort by newest first
+                    notes.sort((a, b) => b.date - a.date);
+                    
+                    console.log('Processed notes:', notes.length);
+                    
+                    // Always render notes, even if empty
+                    renderNotes();
+                    updateStatus('', `🌍 ${notes.length} global notes loaded`);
+                    isLoading = false;
+                    
+                } catch (error) {
+                    console.error('Error processing notes:', error);
+                    updateStatus('error', 'Failed to load notes');
+                    renderNotes([]); // Render empty state
+                }
+            }, (error) => {
+                console.error('Firebase error:', error);
+                updateStatus('error', 'Connection failed');
+                renderNotes([]); // Render empty state
+                isLoading = false;
+            });
         }
 
+        // Save note to Firebase
+        function saveNoteToFirebase(noteData) {
+            const notesRef = ref(database, 'notes');
+            
+            const firebaseNote = {
+                title: noteData.title,
+                content: noteData.content,
+                user: noteData.user,
+                timestamp: Date.now(),
+                serverTimestamp: serverTimestamp()
+            };
+            
+            return push(notesRef, firebaseNote);
+        }
+
+        // Copy note content
+        function copyNoteContent(noteId) {
+            const note = notes.find(n => n.id === noteId);
+            if (!note) return;
+
+            navigator.clipboard.writeText(`${note.title}\n\n${note.content}\n\n— ${note.user}`).then(() => {
+                const copyButton = document.querySelector(`[data-note-id="${noteId}"] .copy-button`);
+                if (copyButton) {
+                    const originalHTML = copyButton.innerHTML;
+                    copyButton.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20,6 9,17 4,12"></polyline></svg>';
+                    copyButton.classList.add('copied');
+                    
+                    setTimeout(() => {
+                        copyButton.innerHTML = originalHTML;
+                        copyButton.classList.remove('copied');
+                    }, 2000);
+                }
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+            });
+        }
+
+        // Select note
+        function selectNote(noteId, event) {
+            if (event.target.classList.contains('copy-button')) {
+                return;
+            }
+
+            document.querySelectorAll('.note-card').forEach(card => {
+                card.classList.remove('selected');
+            });
+
+            const noteCard = event.currentTarget;
+            noteCard.classList.add('selected');
+            selectedNoteId = noteId;
+        }
+
+        // Search notes
         function searchNotes() {
             const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
             
@@ -734,6 +781,7 @@
             renderNotes(filteredNotes);
         }
 
+        // Modal functions
         function openModal() {
             document.getElementById('noteModal').style.display = 'flex';
             document.body.style.overflow = 'hidden';
@@ -748,6 +796,7 @@
             document.getElementById('noteForm').reset();
         }
 
+        // Create note
         async function createNote(event) {
             event.preventDefault();
             
@@ -817,13 +866,15 @@
         window.copyNoteContent = copyNoteContent;
 
         // Initialize the application
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('ScriptyNote Global initializing...');
-            loadNotesFromFirebase();
-            
-            document.getElementById('searchInput').value = '';
-            console.log('ScriptyNote Global initialized!');
-        });
+        console.log('ScriptyNote Global initializing...');
+        
+        // Start loading notes immediately
+        loadNotesFromFirebase();
+        
+        // Clear search input on page load
+        document.getElementById('searchInput').value = '';
+        
+        console.log('ScriptyNote Global initialized!');
     </script>
 </body>
 </html>
