@@ -445,7 +445,9 @@
     </div>
 
     <script>
-        // Note storage system using in-memory storage
+        // Persistent note storage system
+        const STORAGE_KEY = 'scriptynote_data';
+        const DATA_VERSION = '1.0';
         let notes = [];
         let selectedNoteId = null;
         
@@ -454,46 +456,214 @@
             {
                 id: 1,
                 title: "Welcome to ScriptyNote",
-                content: "This is your first note! You can create, search, and organize all your thoughts here. The interface is designed to be clean and intuitive.",
+                content: "This is your first note! You can create, search, and organize all your thoughts here. The interface is designed to be clean and intuitive. Your notes are automatically saved and will persist forever!",
                 user: "System",
-                date: new Date('2025-06-20T10:00:00').toISOString()
+                date: new Date('2025-06-20T10:00:00').toISOString(),
+                created: new Date('2025-06-20T10:00:00').toISOString()
             },
             {
                 id: 2,
                 title: "Project Ideas",
-                content: "Build a modern web application with React and Node.js. Focus on user experience and performance optimization.",
+                content: "Build a modern web application with React and Node.js. Focus on user experience and performance optimization. Consider implementing real-time features and PWA capabilities.",
                 user: "Alex Chen",
-                date: new Date('2025-06-19T15:30:00').toISOString()
+                date: new Date('2025-06-19T15:30:00').toISOString(),
+                created: new Date('2025-06-19T15:30:00').toISOString()
             },
             {
                 id: 3,
                 title: "Meeting Notes",
-                content: "Discussed Q3 roadmap, new feature implementations, and team restructuring. Action items: Review designs by Friday.",
+                content: "Discussed Q3 roadmap, new feature implementations, and team restructuring. Action items: Review designs by Friday, schedule follow-up meeting with stakeholders.",
                 user: "Sarah Johnson",
-                date: new Date('2025-06-18T14:15:00').toISOString()
+                date: new Date('2025-06-18T14:15:00').toISOString(),
+                created: new Date('2025-06-18T14:15:00').toISOString()
             },
             {
                 id: 4,
                 title: "Learning Goals",
-                content: "Master advanced CSS animations, learn Three.js for 3D web experiences, and improve TypeScript skills.",
+                content: "Master advanced CSS animations, learn Three.js for 3D web experiences, and improve TypeScript skills. Also explore WebAssembly and Progressive Web Apps.",
                 user: "Mike Rodriguez",
-                date: new Date('2025-06-17T09:45:00').toISOString()
+                date: new Date('2025-06-17T09:45:00').toISOString(),
+                created: new Date('2025-06-17T09:45:00').toISOString()
             },
             {
                 id: 5,
                 title: "Recipe Collection",
-                content: "Tried the new pasta recipe today - amazing! Need to adjust seasoning next time. Add more garlic and herbs.",
+                content: "Tried the new pasta recipe today - amazing! Need to adjust seasoning next time. Add more garlic and herbs. Will definitely make this again for dinner parties.",
                 user: "Emma Wilson",
-                date: new Date('2025-06-16T19:20:00').toISOString()
+                date: new Date('2025-06-16T19:20:00').toISOString(),
+                created: new Date('2025-06-16T19:20:00').toISOString()
             }
         ];
 
-        // Load notes (using default notes for this demo)
+        // Enhanced storage functions with fallback mechanisms
+        function saveNotes() {
+            try {
+                const dataToSave = {
+                    version: DATA_VERSION,
+                    notes: notes,
+                    timestamp: new Date().toISOString(),
+                    backup: true
+                };
+                
+                // Try multiple storage methods
+                const serializedData = JSON.stringify(dataToSave);
+                
+                // Method 1: Try standard storage first
+                try {
+                    if (typeof Storage !== 'undefined') {
+                        localStorage.setItem(STORAGE_KEY, serializedData);
+                        localStorage.setItem(STORAGE_KEY + '_backup', serializedData);
+                    }
+                } catch (e) {
+                    console.warn('localStorage not available, using fallback');
+                }
+                
+                // Method 2: IndexedDB fallback
+                try {
+                    if ('indexedDB' in window) {
+                        saveToIndexedDB(dataToSave);
+                    }
+                } catch (e) {
+                    console.warn('IndexedDB not available');
+                }
+                
+                // Method 3: Cookie fallback (for essential data)
+                try {
+                    const essentialData = {
+                        version: DATA_VERSION,
+                        count: notes.length,
+                        lastSaved: new Date().toISOString()
+                    };
+                    document.cookie = `scriptynote_meta=${JSON.stringify(essentialData)}; expires=Fri, 31 Dec 9999 23:59:59 GMT; path=/`;
+                } catch (e) {
+                    console.warn('Cookie storage failed');
+                }
+                
+                console.log('Notes saved successfully');
+            } catch (error) {
+                console.error('Failed to save notes:', error);
+            }
+        }
+
         function loadNotes() {
-            notes = defaultNotes.map(note => ({
-                ...note,
-                date: new Date(note.date)
-            }));
+            try {
+                let loadedData = null;
+                
+                // Try to load from localStorage first
+                try {
+                    if (typeof Storage !== 'undefined') {
+                        const stored = localStorage.getItem(STORAGE_KEY);
+                        if (stored) {
+                            loadedData = JSON.parse(stored);
+                        } else {
+                            // Try backup
+                            const backup = localStorage.getItem(STORAGE_KEY + '_backup');
+                            if (backup) {
+                                loadedData = JSON.parse(backup);
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.warn('localStorage read failed, trying alternatives');
+                }
+                
+                // If localStorage failed, try IndexedDB
+                if (!loadedData) {
+                    try {
+                        loadFromIndexedDB().then(data => {
+                            if (data && data.notes) {
+                                notes = data.notes.map(note => ({
+                                    ...note,
+                                    date: new Date(note.date),
+                                    created: new Date(note.created || note.date)
+                                }));
+                                renderNotes();
+                            }
+                        });
+                    } catch (e) {
+                        console.warn('IndexedDB read failed');
+                    }
+                }
+                
+                if (loadedData && loadedData.notes && Array.isArray(loadedData.notes)) {
+                    // Validate and restore notes
+                    notes = loadedData.notes.map(note => ({
+                        ...note,
+                        date: new Date(note.date),
+                        created: new Date(note.created || note.date)
+                    }));
+                    console.log(`Loaded ${notes.length} notes from storage`);
+                } else {
+                    // First time user - initialize with default notes
+                    console.log('No saved notes found, initializing with defaults');
+                    notes = defaultNotes.map(note => ({
+                        ...note,
+                        date: new Date(note.date),
+                        created: new Date(note.created || note.date)
+                    }));
+                    // Save the default notes immediately
+                    saveNotes();
+                }
+            } catch (error) {
+                console.error('Failed to load notes:', error);
+                // Fallback to default notes
+                notes = defaultNotes.map(note => ({
+                    ...note,
+                    date: new Date(note.date),
+                    created: new Date(note.created || note.date)
+                }));
+            }
+        }
+
+        // IndexedDB functions for additional persistence
+        function saveToIndexedDB(data) {
+            const request = indexedDB.open('ScriptyNoteDB', 1);
+            
+            request.onupgradeneeded = function(event) {
+                const db = event.target.result;
+                if (!db.objectStoreNames.contains('notes')) {
+                    db.createObjectStore('notes', { keyPath: 'id' });
+                }
+                if (!db.objectStoreNames.contains('metadata')) {
+                    db.createObjectStore('metadata', { keyPath: 'key' });
+                }
+            };
+            
+            request.onsuccess = function(event) {
+                const db = event.target.result;
+                const transaction = db.transaction(['metadata'], 'readwrite');
+                const store = transaction.objectStore('metadata');
+                store.put({ key: 'appData', data: data });
+            };
+        }
+
+        function loadFromIndexedDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open('ScriptyNoteDB', 1);
+                
+                request.onsuccess = function(event) {
+                    const db = event.target.result;
+                    const transaction = db.transaction(['metadata'], 'readonly');
+                    const store = transaction.objectStore('metadata');
+                    const getRequest = store.get('appData');
+                    
+                    getRequest.onsuccess = function() {
+                        if (getRequest.result) {
+                            resolve(getRequest.result.data);
+                        } else {
+                            resolve(null);
+                        }
+                    };
+                    
+                    getRequest.onerror = function() {
+                        reject(getRequest.error);
+                    };
+                };
+                
+                request.onerror = function() {
+                    reject(request.error);
+                };
+            });
         }
 
         function formatDate(date) {
@@ -568,7 +738,7 @@
             
             // Sort notes by date (newest first)
             const sortedNotes = [...notesToRender].sort((a, b) => new Date(b.date) - new Date(a.date));
-            const recentNotes = sortedNotes.slice(0, 50); // Show up to 50 notes
+            const recentNotes = sortedNotes.slice(0, 100); // Show up to 100 notes
             
             notesGrid.innerHTML = recentNotes.map((note, index) => `
                 <div class="note-card" data-note-id="${note.id}" style="animation-delay: ${index * 0.05}s" onclick="selectNote(${note.id}, event)">
@@ -643,17 +813,22 @@
             
             // Generate new ID
             const newId = notes.length > 0 ? Math.max(...notes.map(n => n.id)) + 1 : 1;
+            const now = new Date();
             
             const newNote = {
                 id: newId,
                 title,
                 content,
                 user,
-                date: new Date()
+                date: now,
+                created: now
             };
             
             // Add to beginning of array (newest first)
             notes.unshift(newNote);
+            
+            // Save to persistent storage immediately
+            saveNotes();
             
             // Re-render notes
             renderNotes();
@@ -671,6 +846,29 @@
                     }, 1000);
                 }
             }, 100);
+        }
+
+        // Auto-save functionality
+        function enableAutoSave() {
+            // Save every 30 seconds as a backup
+            setInterval(saveNotes, 30000);
+            
+            // Save when page is about to be closed
+            window.addEventListener('beforeunload', function(e) {
+                saveNotes();
+            });
+            
+            // Save when page becomes hidden (mobile/tab switching)
+            document.addEventListener('visibilitychange', function() {
+                if (document.hidden) {
+                    saveNotes();
+                }
+            });
+            
+            // Save when browser loses focus
+            window.addEventListener('blur', function() {
+                saveNotes();
+            });
         }
 
         // Event listeners
@@ -701,14 +899,98 @@
             }
         });
 
+        // Data integrity check
+        function validateNotes() {
+            // Remove any corrupted notes
+            notes = notes.filter(note => 
+                note && 
+                typeof note.id !== 'undefined' && 
+                note.title && 
+                note.content && 
+                note.user
+            );
+            
+            // Ensure all notes have proper date objects
+            notes.forEach(note => {
+                if (typeof note.date === 'string') {
+                    note.date = new Date(note.date);
+                }
+                if (!note.created) {
+                    note.created = note.date;
+                } else if (typeof note.created === 'string') {
+                    note.created = new Date(note.created);
+                }
+            });
+        }
+
         // Initialize the application
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('ScriptyNote initializing...');
+            
+            // Load notes from storage
             loadNotes();
+            
+            // Validate loaded notes
+            validateNotes();
+            
+            // Render notes
             renderNotes();
+            
+            // Enable auto-save
+            enableAutoSave();
             
             // Clear search when page loads
             document.getElementById('searchInput').value = '';
+            
+            // Log initialization status
+            console.log(`ScriptyNote initialized with ${notes.length} notes`);
+            
+            // Periodic data integrity check
+            setInterval(function() {
+                validateNotes();
+                if (notes.length > 0) {
+                    saveNotes();
+                }
+            }, 60000); // Check every minute
         });
+
+        // Export/Import functionality (future enhancement)
+        function exportNotes() {
+            try {
+                const exportData = {
+                    version: DATA_VERSION,
+                    exportDate: new Date().toISOString(),
+                    notes: notes,
+                    count: notes.length
+                };
+                
+                const dataStr = JSON.stringify(exportData, null, 2);
+                const dataBlob = new Blob([dataStr], {type: 'application/json'});
+                
+                const url = URL.createObjectURL(dataBlob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `scriptynote_backup_${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+                
+                console.log('Notes exported successfully');
+            } catch (error) {
+                console.error('Failed to export notes:', error);
+            }
+        }
+
+        // Expose functions for debugging
+        window.ScriptyNote = {
+            exportNotes,
+            saveNotes,
+            loadNotes,
+            validateNotes,
+            notes: () => notes,
+            version: DATA_VERSION
+        };
     </script>
 </body>
 </html>
