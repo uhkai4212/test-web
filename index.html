@@ -118,6 +118,7 @@
             opacity: 0;
             transform: translateY(20px);
             animation: noteAppear 0.6s ease-out forwards;
+            position: relative;
         }
 
         .note-card:hover {
@@ -125,6 +126,11 @@
             background: rgba(255, 255, 255, 0.06);
             border-color: rgba(255, 255, 255, 0.15);
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .note-card.selected {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(120, 119, 198, 0.3);
         }
 
         .note-header {
@@ -156,6 +162,37 @@
             color: #ccc;
             line-height: 1.6;
             font-size: 0.95rem;
+        }
+
+        .copy-button {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            border-radius: 8px;
+            padding: 0.5rem;
+            color: #ccc;
+            cursor: pointer;
+            opacity: 0;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            font-size: 0.9rem;
+        }
+
+        .note-card.selected .copy-button {
+            opacity: 1;
+        }
+
+        .copy-button:hover {
+            background: rgba(255, 255, 255, 0.2);
+            color: #fff;
+            transform: scale(1.1);
+        }
+
+        .copy-button.copied {
+            background: rgba(120, 119, 198, 0.3);
+            color: #7877c6;
         }
 
         .create-note-btn {
@@ -408,9 +445,9 @@
     </div>
 
     <script>
-        // Note storage system using localStorage
+        // Note storage system using in-memory storage
         let notes = [];
-        const STORAGE_KEY = 'scriptynote_notes';
+        let selectedNoteId = null;
         
         // Default sample notes
         const defaultNotes = [
@@ -451,48 +488,12 @@
             }
         ];
 
-        // Load notes from localStorage
+        // Load notes (using default notes for this demo)
         function loadNotes() {
-            try {
-                const stored = localStorage.getItem(STORAGE_KEY);
-                if (stored) {
-                    const parsedNotes = JSON.parse(stored);
-                    // Convert date strings back to Date objects
-                    notes = parsedNotes.map(note => ({
-                        ...note,
-                        date: new Date(note.date)
-                    }));
-                } else {
-                    // First time user - initialize with default notes
-                    notes = defaultNotes.map(note => ({
-                        ...note,
-                        date: new Date(note.date)
-                    }));
-                    saveNotes();
-                }
-            } catch (error) {
-                console.error('Error loading notes:', error);
-                // Fallback to default notes if localStorage is corrupted
-                notes = defaultNotes.map(note => ({
-                    ...note,
-                    date: new Date(note.date)
-                }));
-            }
-        }
-
-        // Save notes to localStorage
-        function saveNotes() {
-            try {
-                // Convert Date objects to ISO strings for storage
-                const notesToStore = notes.map(note => ({
-                    ...note,
-                    date: note.date.toISOString()
-                }));
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(notesToStore));
-            } catch (error) {
-                console.error('Error saving notes:', error);
-                // Could show user notification here
-            }
+            notes = defaultNotes.map(note => ({
+                ...note,
+                date: new Date(note.date)
+            }));
         }
 
         function formatDate(date) {
@@ -508,6 +509,49 @@
                 day: 'numeric',
                 year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
             });
+        }
+
+        function truncateText(text, maxLength = 60) {
+            if (text.length <= maxLength) return text;
+            return text.substring(0, maxLength) + '…';
+        }
+
+        function copyNoteContent(noteId) {
+            const note = notes.find(n => n.id === noteId);
+            if (!note) return;
+
+            navigator.clipboard.writeText(note.content).then(() => {
+                const copyButton = document.querySelector(`[data-note-id="${noteId}"] .copy-button`);
+                if (copyButton) {
+                    const originalHTML = copyButton.innerHTML;
+                    copyButton.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20,6 9,17 4,12"></polyline></svg>';
+                    copyButton.classList.add('copied');
+                    
+                    setTimeout(() => {
+                        copyButton.innerHTML = originalHTML;
+                        copyButton.classList.remove('copied');
+                    }, 2000);
+                }
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+            });
+        }
+
+        function selectNote(noteId, event) {
+            // Prevent selecting when clicking the copy button
+            if (event.target.classList.contains('copy-button')) {
+                return;
+            }
+
+            // Remove previous selection
+            document.querySelectorAll('.note-card').forEach(card => {
+                card.classList.remove('selected');
+            });
+
+            // Add selection to clicked note
+            const noteCard = event.currentTarget;
+            noteCard.classList.add('selected');
+            selectedNoteId = noteId;
         }
 
         function renderNotes(notesToRender = notes) {
@@ -527,13 +571,19 @@
             const recentNotes = sortedNotes.slice(0, 50); // Show up to 50 notes
             
             notesGrid.innerHTML = recentNotes.map((note, index) => `
-                <div class="note-card" style="animation-delay: ${index * 0.05}s">
+                <div class="note-card" data-note-id="${note.id}" style="animation-delay: ${index * 0.05}s" onclick="selectNote(${note.id}, event)">
+                    <button class="copy-button" onclick="copyNoteContent(${note.id})">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="m5,15H4a2,2,0,0,1-2-2V4A2,2,0,0,1,4,2H13a2,2,0,0,1,2,2v1"></path>
+                        </svg>
+                    </button>
                     <div class="note-header">
                         <div class="note-user">${escapeHtml(note.user)}</div>
                         <div class="note-date">${formatDate(note.date)}</div>
                     </div>
                     <div class="note-title">${escapeHtml(note.title)}</div>
-                    <div class="note-content">${escapeHtml(note.content)}</div>
+                    <div class="note-content">${escapeHtml(truncateText(note.content))}</div>
                 </div>
             `).join('');
         }
@@ -605,9 +655,6 @@
             // Add to beginning of array (newest first)
             notes.unshift(newNote);
             
-            // Save to localStorage
-            saveNotes();
-            
             // Re-render notes
             renderNotes();
             
@@ -644,6 +691,16 @@
             }
         });
 
+        // Deselect note when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.note-card')) {
+                document.querySelectorAll('.note-card').forEach(card => {
+                    card.classList.remove('selected');
+                });
+                selectedNoteId = null;
+            }
+        });
+
         // Initialize the application
         document.addEventListener('DOMContentLoaded', function() {
             loadNotes();
@@ -651,14 +708,6 @@
             
             // Clear search when page loads
             document.getElementById('searchInput').value = '';
-        });
-
-        // Handle page visibility changes to refresh notes
-        document.addEventListener('visibilitychange', function() {
-            if (!document.hidden) {
-                loadNotes();
-                renderNotes();
-            }
         });
     </script>
 </body>
