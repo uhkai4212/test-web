@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Notes</title>
+    <title>ScriptyNote</title>
     <style>
         * {
             margin: 0;
@@ -161,19 +161,21 @@
         .create-note-btn {
             position: fixed;
             bottom: 2rem;
-            left: 2rem;
+            right: 2rem;
             background: linear-gradient(135deg, #7877c6, #ff77c6);
             border: none;
             border-radius: 16px;
-            padding: 1rem 1.5rem;
+            padding: 0.8rem 1.2rem;
             color: white;
             font-weight: 600;
-            font-size: 1rem;
+            font-size: 0.9rem;
             cursor: pointer;
             box-shadow: 0 8px 32px rgba(120, 119, 198, 0.3);
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             backdrop-filter: blur(10px);
             animation: buttonPulse 2s infinite;
+            z-index: 100;
+            white-space: nowrap;
         }
 
         .create-note-btn:hover {
@@ -350,9 +352,9 @@
             
             .create-note-btn {
                 bottom: 1rem;
-                left: 1rem;
                 right: 1rem;
-                width: calc(100% - 2rem);
+                left: auto;
+                width: auto;
                 text-align: center;
             }
         }
@@ -363,7 +365,7 @@
     
     <div class="container">
         <div class="header">
-            <h1 class="title">Notes</h1>
+            <h1 class="title">ScriptyNote</h1>
             <p class="subtitle">Capture your thoughts, organize your ideas</p>
         </div>
 
@@ -406,44 +408,82 @@
     </div>
 
     <script>
-        // Sample notes data
-        let notes = [
-            {
-                id: 1,
-                title: "Welcome to Notes",
-                content: "This is your first note! You can create, search, and organize all your thoughts here. The interface is designed to be clean and intuitive.",
-                user: "System",
-                date: new Date('2025-06-20T10:00:00')
-            },
-            {
-                id: 2,
-                title: "Project Ideas",
-                content: "Build a modern web application with React and Node.js. Focus on user experience and performance optimization.",
-                user: "Alex Chen",
-                date: new Date('2025-06-19T15:30:00')
-            },
-            {
-                id: 3,
-                title: "Meeting Notes",
-                content: "Discussed Q3 roadmap, new feature implementations, and team restructuring. Action items: Review designs by Friday.",
-                user: "Sarah Johnson",
-                date: new Date('2025-06-18T14:15:00')
-            },
-            {
-                id: 4,
-                title: "Learning Goals",
-                content: "Master advanced CSS animations, learn Three.js for 3D web experiences, and improve TypeScript skills.",
-                user: "Mike Rodriguez",
-                date: new Date('2025-06-17T09:45:00')
-            },
-            {
-                id: 5,
-                title: "Recipe Collection",
-                content: "Tried the new pasta recipe today - amazing! Need to adjust seasoning next time. Add more garlic and herbs.",
-                user: "Emma Wilson",
-                date: new Date('2025-06-16T19:20:00')
+        // Note persistence system - stores data in memory for the session
+        let notes = [];
+        
+        // Initialize notes from data store or use defaults
+        function initializeNotes() {
+            const storedNotes = getNotes();
+            if (storedNotes.length === 0) {
+                // Default sample notes
+                notes = [
+                    {
+                        id: 1,
+                        title: "Welcome to ScriptyNote",
+                        content: "This is your first note! You can create, search, and organize all your thoughts here. The interface is designed to be clean and intuitive.",
+                        user: "System",
+                        date: new Date('2025-06-20T10:00:00')
+                    },
+                    {
+                        id: 2,
+                        title: "Project Ideas",
+                        content: "Build a modern web application with React and Node.js. Focus on user experience and performance optimization.",
+                        user: "Alex Chen",
+                        date: new Date('2025-06-19T15:30:00')
+                    },
+                    {
+                        id: 3,
+                        title: "Meeting Notes",
+                        content: "Discussed Q3 roadmap, new feature implementations, and team restructuring. Action items: Review designs by Friday.",
+                        user: "Sarah Johnson",
+                        date: new Date('2025-06-18T14:15:00')
+                    },
+                    {
+                        id: 4,
+                        title: "Learning Goals",
+                        content: "Master advanced CSS animations, learn Three.js for 3D web experiences, and improve TypeScript skills.",
+                        user: "Mike Rodriguez",
+                        date: new Date('2025-06-17T09:45:00')
+                    },
+                    {
+                        id: 5,
+                        title: "Recipe Collection",
+                        content: "Tried the new pasta recipe today - amazing! Need to adjust seasoning next time. Add more garlic and herbs.",
+                        user: "Emma Wilson",
+                        date: new Date('2025-06-16T19:20:00')
+                    }
+                ];
+                saveNotes();
+            } else {
+                notes = storedNotes;
             }
-        ];
+        }
+
+        // In-memory storage system
+        let persistentStorage = new Map();
+
+        function saveNotes() {
+            const notesData = notes.map(note => ({
+                ...note,
+                date: note.date.toISOString()
+            }));
+            persistentStorage.set('scriptyNotes', JSON.stringify(notesData));
+        }
+
+        function getNotes() {
+            const stored = persistentStorage.get('scriptyNotes');
+            if (!stored) return [];
+            
+            try {
+                const parsed = JSON.parse(stored);
+                return parsed.map(note => ({
+                    ...note,
+                    date: new Date(note.date)
+                }));
+            } catch (e) {
+                return [];
+            }
+        }
 
         function formatDate(date) {
             const now = new Date();
@@ -513,7 +553,7 @@
             const user = document.getElementById('noteUser').value;
             
             const newNote = {
-                id: notes.length + 1,
+                id: Math.max(...notes.map(n => n.id), 0) + 1,
                 title,
                 content,
                 user,
@@ -521,6 +561,7 @@
             };
             
             notes.unshift(newNote);
+            saveNotes(); // Persist the new note
             renderNotes();
             closeModal();
             
@@ -552,6 +593,7 @@
         });
 
         // Initialize the page
+        initializeNotes();
         renderNotes();
     </script>
 </body>
