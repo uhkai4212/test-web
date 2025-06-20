@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ScriptyNote</title>
+    <title>ScriptyNote - Global</title>
     <style>
         * {
             margin: 0;
@@ -60,6 +60,36 @@
             color: #999;
             opacity: 0;
             animation: fadeIn 0.8s ease-out 0.3s forwards;
+        }
+
+        .global-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(120, 119, 198, 0.1);
+            border: 1px solid rgba(120, 119, 198, 0.3);
+            border-radius: 20px;
+            padding: 0.5rem 1rem;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+            color: #7877c6;
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #10b981;
+            animation: blink 1.5s infinite;
+        }
+
+        .status-indicator.loading {
+            background: #f59e0b;
+        }
+
+        .status-indicator.error {
+            background: #ef4444;
         }
 
         .search-container {
@@ -131,6 +161,12 @@
         .note-card.selected {
             background: rgba(255, 255, 255, 0.08);
             border-color: rgba(120, 119, 198, 0.3);
+        }
+
+        .note-card.new-note {
+            border-color: rgba(120, 119, 198, 0.5);
+            background: rgba(120, 119, 198, 0.05);
+            animation: newNoteGlow 3s ease-out;
         }
 
         .note-header {
@@ -323,6 +359,17 @@
             background: rgba(255, 255, 255, 0.15);
         }
 
+        .loading-spinner {
+            display: none;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 2px solid #7877c6;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
         @keyframes fadeInDown {
             from {
                 opacity: 0;
@@ -377,6 +424,30 @@
             }
         }
 
+        @keyframes pulse {
+            0%, 100% { opacity: 0.8; }
+            50% { opacity: 1; }
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0.3; }
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes newNoteGlow {
+            0% {
+                box-shadow: 0 0 20px rgba(120, 119, 198, 0.5);
+            }
+            100% {
+                box-shadow: 0 0 0 rgba(120, 119, 198, 0);
+            }
+        }
+
         @media (max-width: 768px) {
             .title {
                 font-size: 2rem;
@@ -403,26 +474,30 @@
     <div class="container">
         <div class="header">
             <h1 class="title">ScriptyNote</h1>
-            <p class="subtitle">Capture your thoughts, organize your ideas</p>
+            <p class="subtitle">Global notes shared with the world</p>
+            <div class="global-indicator">
+                <div class="status-indicator" id="statusIndicator"></div>
+                <span id="statusText">Connecting to global network...</span>
+            </div>
         </div>
 
         <div class="search-container">
             <div class="search-icon">🔍</div>
-            <input type="text" class="search-input" placeholder="Search notes, dates, or users..." id="searchInput">
+            <input type="text" class="search-input" placeholder="Search global notes, dates, or users..." id="searchInput">
         </div>
 
         <div class="notes-grid" id="notesGrid">
-            <!-- Notes will be populated here -->
+            <div class="loading-spinner" id="loadingSpinner"></div>
         </div>
     </div>
 
     <button class="create-note-btn" onclick="openModal()">
-        ✨ Create Note
+        🌍 Share Note Globally
     </button>
 
     <div class="modal" id="noteModal">
         <div class="modal-content">
-            <h2 class="modal-title">Create New Note</h2>
+            <h2 class="modal-title">Share Note with the World</h2>
             <form id="noteForm">
                 <div class="form-group">
                     <label class="form-label">Title</label>
@@ -438,232 +513,108 @@
                 </div>
                 <div class="modal-buttons">
                     <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Create Note</button>
+                    <button type="submit" class="btn btn-primary" id="createBtn">Share Globally</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <script>
-        // Persistent note storage system
-        const STORAGE_KEY = 'scriptynote_data';
-        const DATA_VERSION = '1.0';
+    <!-- Firebase SDK -->
+    <script type="module">
+        // Import Firebase modules
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getDatabase, ref, push, onValue, serverTimestamp, query, orderByChild, limitToLast } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
+
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyAxFOxj159yyXtZsw9X7CcaF75_BBV6bMA",
+            authDomain: "scriptynote-19374.firebaseapp.com",
+            databaseURL: "https://scriptynote-19374-default-rtdb.firebaseio.com",
+            projectId: "scriptynote-19374",
+            storageBucket: "scriptynote-19374.firebasestorage.app",
+            messagingSenderId: "481149530130",
+            appId: "1:481149530130:web:473771ad91176a0f2128cb"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
+
+        // Global variables
         let notes = [];
         let selectedNoteId = null;
-        
-        // Default sample notes
-        const defaultNotes = [
-            {
-                id: 1,
-                title: "Welcome to ScriptyNote",
-                content: "This is your first note! You can create, search, and organize all your thoughts here. The interface is designed to be clean and intuitive. Your notes are automatically saved and will persist forever!",
-                user: "System",
-                date: new Date('2025-06-20T10:00:00').toISOString(),
-                created: new Date('2025-06-20T10:00:00').toISOString()
-            },
-            {
-                id: 2,
-                title: "Project Ideas",
-                content: "Build a modern web application with React and Node.js. Focus on user experience and performance optimization. Consider implementing real-time features and PWA capabilities.",
-                user: "Alex Chen",
-                date: new Date('2025-06-19T15:30:00').toISOString(),
-                created: new Date('2025-06-19T15:30:00').toISOString()
-            },
-            {
-                id: 3,
-                title: "Meeting Notes",
-                content: "Discussed Q3 roadmap, new feature implementations, and team restructuring. Action items: Review designs by Friday, schedule follow-up meeting with stakeholders.",
-                user: "Sarah Johnson",
-                date: new Date('2025-06-18T14:15:00').toISOString(),
-                created: new Date('2025-06-18T14:15:00').toISOString()
-            },
-            {
-                id: 4,
-                title: "Learning Goals",
-                content: "Master advanced CSS animations, learn Three.js for 3D web experiences, and improve TypeScript skills. Also explore WebAssembly and Progressive Web Apps.",
-                user: "Mike Rodriguez",
-                date: new Date('2025-06-17T09:45:00').toISOString(),
-                created: new Date('2025-06-17T09:45:00').toISOString()
-            },
-            {
-                id: 5,
-                title: "Recipe Collection",
-                content: "Tried the new pasta recipe today - amazing! Need to adjust seasoning next time. Add more garlic and herbs. Will definitely make this again for dinner parties.",
-                user: "Emma Wilson",
-                date: new Date('2025-06-16T19:20:00').toISOString(),
-                created: new Date('2025-06-16T19:20:00').toISOString()
-            }
-        ];
+        let isLoading = true;
 
-        // Enhanced storage functions with fallback mechanisms
-        function saveNotes() {
-            try {
-                const dataToSave = {
-                    version: DATA_VERSION,
-                    notes: notes,
-                    timestamp: new Date().toISOString(),
-                    backup: true
-                };
-                
-                // Try multiple storage methods
-                const serializedData = JSON.stringify(dataToSave);
-                
-                // Method 1: Try standard storage first
-                try {
-                    if (typeof Storage !== 'undefined') {
-                        localStorage.setItem(STORAGE_KEY, serializedData);
-                        localStorage.setItem(STORAGE_KEY + '_backup', serializedData);
-                    }
-                } catch (e) {
-                    console.warn('localStorage not available, using fallback');
-                }
-                
-                // Method 2: IndexedDB fallback
-                try {
-                    if ('indexedDB' in window) {
-                        saveToIndexedDB(dataToSave);
-                    }
-                } catch (e) {
-                    console.warn('IndexedDB not available');
-                }
-                
-                // Method 3: Cookie fallback (for essential data)
-                try {
-                    const essentialData = {
-                        version: DATA_VERSION,
-                        count: notes.length,
-                        lastSaved: new Date().toISOString()
-                    };
-                    document.cookie = `scriptynote_meta=${JSON.stringify(essentialData)}; expires=Fri, 31 Dec 9999 23:59:59 GMT; path=/`;
-                } catch (e) {
-                    console.warn('Cookie storage failed');
-                }
-                
-                console.log('Notes saved successfully');
-            } catch (error) {
-                console.error('Failed to save notes:', error);
-            }
+        // Update status indicator
+        function updateStatus(status, text) {
+            const indicator = document.getElementById('statusIndicator');
+            const statusText = document.getElementById('statusText');
+            
+            indicator.className = `status-indicator ${status}`;
+            statusText.textContent = text;
         }
 
-        function loadNotes() {
-            try {
-                let loadedData = null;
-                
-                // Try to load from localStorage first
+        // Load notes from Firebase
+        function loadNotesFromFirebase() {
+            updateStatus('loading', 'Loading global notes...');
+            document.getElementById('loadingSpinner').style.display = 'block';
+            
+            const notesRef = ref(database, 'notes');
+            const notesQuery = query(notesRef, orderByChild('timestamp'), limitToLast(100));
+            
+            onValue(notesQuery, (snapshot) => {
                 try {
-                    if (typeof Storage !== 'undefined') {
-                        const stored = localStorage.getItem(STORAGE_KEY);
-                        if (stored) {
-                            loadedData = JSON.parse(stored);
-                        } else {
-                            // Try backup
-                            const backup = localStorage.getItem(STORAGE_KEY + '_backup');
-                            if (backup) {
-                                loadedData = JSON.parse(backup);
-                            }
-                        }
-                    }
-                } catch (e) {
-                    console.warn('localStorage read failed, trying alternatives');
-                }
-                
-                // If localStorage failed, try IndexedDB
-                if (!loadedData) {
-                    try {
-                        loadFromIndexedDB().then(data => {
-                            if (data && data.notes) {
-                                notes = data.notes.map(note => ({
-                                    ...note,
-                                    date: new Date(note.date),
-                                    created: new Date(note.created || note.date)
-                                }));
-                                renderNotes();
-                            }
+                    const data = snapshot.val();
+                    notes = [];
+                    
+                    if (data) {
+                        Object.keys(data).forEach(key => {
+                            const note = data[key];
+                            notes.push({
+                                id: key,
+                                title: note.title,
+                                content: note.content,
+                                user: note.user,
+                                date: new Date(note.timestamp),
+                                created: new Date(note.timestamp)
+                            });
                         });
-                    } catch (e) {
-                        console.warn('IndexedDB read failed');
                     }
-                }
-                
-                if (loadedData && loadedData.notes && Array.isArray(loadedData.notes)) {
-                    // Validate and restore notes
-                    notes = loadedData.notes.map(note => ({
-                        ...note,
-                        date: new Date(note.date),
-                        created: new Date(note.created || note.date)
-                    }));
-                    console.log(`Loaded ${notes.length} notes from storage`);
-                } else {
-                    // First time user - initialize with default notes
-                    console.log('No saved notes found, initializing with defaults');
-                    notes = defaultNotes.map(note => ({
-                        ...note,
-                        date: new Date(note.date),
-                        created: new Date(note.created || note.date)
-                    }));
-                    // Save the default notes immediately
-                    saveNotes();
-                }
-            } catch (error) {
-                console.error('Failed to load notes:', error);
-                // Fallback to default notes
-                notes = defaultNotes.map(note => ({
-                    ...note,
-                    date: new Date(note.date),
-                    created: new Date(note.created || note.date)
-                }));
-            }
-        }
-
-        // IndexedDB functions for additional persistence
-        function saveToIndexedDB(data) {
-            const request = indexedDB.open('ScriptyNoteDB', 1);
-            
-            request.onupgradeneeded = function(event) {
-                const db = event.target.result;
-                if (!db.objectStoreNames.contains('notes')) {
-                    db.createObjectStore('notes', { keyPath: 'id' });
-                }
-                if (!db.objectStoreNames.contains('metadata')) {
-                    db.createObjectStore('metadata', { keyPath: 'key' });
-                }
-            };
-            
-            request.onsuccess = function(event) {
-                const db = event.target.result;
-                const transaction = db.transaction(['metadata'], 'readwrite');
-                const store = transaction.objectStore('metadata');
-                store.put({ key: 'appData', data: data });
-            };
-        }
-
-        function loadFromIndexedDB() {
-            return new Promise((resolve, reject) => {
-                const request = indexedDB.open('ScriptyNoteDB', 1);
-                
-                request.onsuccess = function(event) {
-                    const db = event.target.result;
-                    const transaction = db.transaction(['metadata'], 'readonly');
-                    const store = transaction.objectStore('metadata');
-                    const getRequest = store.get('appData');
                     
-                    getRequest.onsuccess = function() {
-                        if (getRequest.result) {
-                            resolve(getRequest.result.data);
-                        } else {
-                            resolve(null);
-                        }
-                    };
+                    // Sort by newest first
+                    notes.sort((a, b) => b.date - a.date);
                     
-                    getRequest.onerror = function() {
-                        reject(getRequest.error);
-                    };
-                };
-                
-                request.onerror = function() {
-                    reject(request.error);
-                };
+                    renderNotes();
+                    updateStatus('', `🌍 ${notes.length} global notes loaded`);
+                    document.getElementById('loadingSpinner').style.display = 'none';
+                    isLoading = false;
+                    
+                    console.log(`Loaded ${notes.length} notes from Firebase`);
+                } catch (error) {
+                    console.error('Error processing notes:', error);
+                    updateStatus('error', 'Failed to load notes');
+                    document.getElementById('loadingSpinner').style.display = 'none';
+                }
+            }, (error) => {
+                console.error('Firebase error:', error);
+                updateStatus('error', 'Connection failed');
+                document.getElementById('loadingSpinner').style.display = 'none';
             });
+        }
+
+        // Save note to Firebase
+        function saveNoteToFirebase(noteData) {
+            const notesRef = ref(database, 'notes');
+            
+            const firebaseNote = {
+                title: noteData.title,
+                content: noteData.content,
+                user: noteData.user,
+                timestamp: Date.now(),
+                serverTimestamp: serverTimestamp()
+            };
+            
+            return push(notesRef, firebaseNote);
         }
 
         function formatDate(date) {
@@ -671,6 +622,9 @@
             const diffTime = Math.abs(now - date);
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
             
+            if (diffTime < 60000) return 'Just now';
+            if (diffTime < 3600000) return `${Math.floor(diffTime / 60000)} min ago`;
+            if (diffTime < 86400000) return `${Math.floor(diffTime / 3600000)}h ago`;
             if (diffDays === 1) return 'Yesterday';
             if (diffDays < 7) return `${diffDays} days ago`;
             
@@ -681,7 +635,7 @@
             });
         }
 
-        function truncateText(text, maxLength = 60) {
+        function truncateText(text, maxLength = 100) {
             if (text.length <= maxLength) return text;
             return text.substring(0, maxLength) + '…';
         }
@@ -690,7 +644,7 @@
             const note = notes.find(n => n.id === noteId);
             if (!note) return;
 
-            navigator.clipboard.writeText(note.content).then(() => {
+            navigator.clipboard.writeText(`${note.title}\n\n${note.content}\n\n— ${note.user}`).then(() => {
                 const copyButton = document.querySelector(`[data-note-id="${noteId}"] .copy-button`);
                 if (copyButton) {
                     const originalHTML = copyButton.innerHTML;
@@ -708,17 +662,14 @@
         }
 
         function selectNote(noteId, event) {
-            // Prevent selecting when clicking the copy button
             if (event.target.classList.contains('copy-button')) {
                 return;
             }
 
-            // Remove previous selection
             document.querySelectorAll('.note-card').forEach(card => {
                 card.classList.remove('selected');
             });
 
-            // Add selection to clicked note
             const noteCard = event.currentTarget;
             noteCard.classList.add('selected');
             selectedNoteId = noteId;
@@ -727,22 +678,23 @@
         function renderNotes(notesToRender = notes) {
             const notesGrid = document.getElementById('notesGrid');
             
+            if (isLoading) {
+                return;
+            }
+            
             if (notesToRender.length === 0) {
                 notesGrid.innerHTML = `
-                    <div style="grid-column: 1 / -1; text-align: center; padding: 2rem; color: #666;">
-                        <p>No notes found. Create your first note!</p>
+                    <div style="grid-column: 1 / -1; text-align: center; padding: 3rem; color: #666;">
+                        <h3 style="margin-bottom: 1rem; color: #999;">No notes found</h3>
+                        <p>Be the first to share a note with the world! 🌍</p>
                     </div>
                 `;
                 return;
             }
             
-            // Sort notes by date (newest first)
-            const sortedNotes = [...notesToRender].sort((a, b) => new Date(b.date) - new Date(a.date));
-            const recentNotes = sortedNotes.slice(0, 100); // Show up to 100 notes
-            
-            notesGrid.innerHTML = recentNotes.map((note, index) => `
-                <div class="note-card" data-note-id="${note.id}" style="animation-delay: ${index * 0.05}s" onclick="selectNote(${note.id}, event)">
-                    <button class="copy-button" onclick="copyNoteContent(${note.id})">
+            notesGrid.innerHTML = notesToRender.map((note, index) => `
+                <div class="note-card" data-note-id="${note.id}" style="animation-delay: ${index * 0.05}s" onclick="selectNote('${note.id}', event)">
+                    <button class="copy-button" onclick="copyNoteContent('${note.id}')">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                             <path d="m5,15H4a2,2,0,0,1-2-2V4A2,2,0,0,1,4,2H13a2,2,0,0,1,2,2v1"></path>
@@ -758,7 +710,6 @@
             `).join('');
         }
 
-        // Escape HTML to prevent XSS
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
@@ -786,7 +737,6 @@
         function openModal() {
             document.getElementById('noteModal').style.display = 'flex';
             document.body.style.overflow = 'hidden';
-            // Focus on the title input
             setTimeout(() => {
                 document.getElementById('noteTitle').focus();
             }, 100);
@@ -798,98 +748,59 @@
             document.getElementById('noteForm').reset();
         }
 
-        function createNote(event) {
+        async function createNote(event) {
             event.preventDefault();
             
             const title = document.getElementById('noteTitle').value.trim();
             const content = document.getElementById('noteContent').value.trim();
             const user = document.getElementById('noteUser').value.trim();
+            const createBtn = document.getElementById('createBtn');
             
-            // Validation
             if (!title || !content || !user) {
                 alert('Please fill in all fields');
                 return;
             }
             
-            // Generate new ID
-            const newId = notes.length > 0 ? Math.max(...notes.map(n => n.id)) + 1 : 1;
-            const now = new Date();
+            // Show loading state
+            createBtn.disabled = true;
+            createBtn.innerHTML = '<div style="display: flex; align-items: center; gap: 0.5rem;"><div class="loading-spinner" style="display: block; width: 16px; height: 16px;"></div>Sharing...</div>';
             
-            const newNote = {
-                id: newId,
-                title,
-                content,
-                user,
-                date: now,
-                created: now
-            };
-            
-            // Add to beginning of array (newest first)
-            notes.unshift(newNote);
-            
-            // Save to persistent storage immediately
-            saveNotes();
-            
-            // Re-render notes
-            renderNotes();
-            
-            // Close modal
-            closeModal();
-            
-            // Add success animation to the first card
-            setTimeout(() => {
-                const firstCard = document.querySelector('.note-card');
-                if (firstCard) {
-                    firstCard.style.background = 'rgba(120, 119, 198, 0.1)';
-                    setTimeout(() => {
-                        firstCard.style.background = 'rgba(255, 255, 255, 0.03)';
-                    }, 1000);
-                }
-            }, 100);
-        }
-
-        // Auto-save functionality
-        function enableAutoSave() {
-            // Save every 30 seconds as a backup
-            setInterval(saveNotes, 30000);
-            
-            // Save when page is about to be closed
-            window.addEventListener('beforeunload', function(e) {
-                saveNotes();
-            });
-            
-            // Save when page becomes hidden (mobile/tab switching)
-            document.addEventListener('visibilitychange', function() {
-                if (document.hidden) {
-                    saveNotes();
-                }
-            });
-            
-            // Save when browser loses focus
-            window.addEventListener('blur', function() {
-                saveNotes();
-            });
+            try {
+                await saveNoteToFirebase({ title, content, user });
+                
+                // Success feedback
+                createBtn.innerHTML = '✅ Shared!';
+                setTimeout(() => {
+                    closeModal();
+                    createBtn.disabled = false;
+                    createBtn.innerHTML = 'Share Globally';
+                }, 1000);
+                
+                console.log('Note shared globally!');
+            } catch (error) {
+                console.error('Error saving note:', error);
+                alert('Failed to share note. Please try again.');
+                createBtn.disabled = false;
+                createBtn.innerHTML = 'Share Globally';
+            }
         }
 
         // Event listeners
         document.getElementById('searchInput').addEventListener('input', searchNotes);
         document.getElementById('noteForm').addEventListener('submit', createNote);
         
-        // Close modal when clicking outside
         document.getElementById('noteModal').addEventListener('click', function(e) {
             if (e.target === this) {
                 closeModal();
             }
         });
 
-        // Close modal with Escape key
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape' && document.getElementById('noteModal').style.display === 'flex') {
                 closeModal();
             }
         });
 
-        // Deselect note when clicking outside
         document.addEventListener('click', function(e) {
             if (!e.target.closest('.note-card')) {
                 document.querySelectorAll('.note-card').forEach(card => {
@@ -899,98 +810,20 @@
             }
         });
 
-        // Data integrity check
-        function validateNotes() {
-            // Remove any corrupted notes
-            notes = notes.filter(note => 
-                note && 
-                typeof note.id !== 'undefined' && 
-                note.title && 
-                note.content && 
-                note.user
-            );
-            
-            // Ensure all notes have proper date objects
-            notes.forEach(note => {
-                if (typeof note.date === 'string') {
-                    note.date = new Date(note.date);
-                }
-                if (!note.created) {
-                    note.created = note.date;
-                } else if (typeof note.created === 'string') {
-                    note.created = new Date(note.created);
-                }
-            });
-        }
+        // Make functions global for onclick handlers
+        window.openModal = openModal;
+        window.closeModal = closeModal;
+        window.selectNote = selectNote;
+        window.copyNoteContent = copyNoteContent;
 
         // Initialize the application
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('ScriptyNote initializing...');
+            console.log('ScriptyNote Global initializing...');
+            loadNotesFromFirebase();
             
-            // Load notes from storage
-            loadNotes();
-            
-            // Validate loaded notes
-            validateNotes();
-            
-            // Render notes
-            renderNotes();
-            
-            // Enable auto-save
-            enableAutoSave();
-            
-            // Clear search when page loads
             document.getElementById('searchInput').value = '';
-            
-            // Log initialization status
-            console.log(`ScriptyNote initialized with ${notes.length} notes`);
-            
-            // Periodic data integrity check
-            setInterval(function() {
-                validateNotes();
-                if (notes.length > 0) {
-                    saveNotes();
-                }
-            }, 60000); // Check every minute
+            console.log('ScriptyNote Global initialized!');
         });
-
-        // Export/Import functionality (future enhancement)
-        function exportNotes() {
-            try {
-                const exportData = {
-                    version: DATA_VERSION,
-                    exportDate: new Date().toISOString(),
-                    notes: notes,
-                    count: notes.length
-                };
-                
-                const dataStr = JSON.stringify(exportData, null, 2);
-                const dataBlob = new Blob([dataStr], {type: 'application/json'});
-                
-                const url = URL.createObjectURL(dataBlob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = `scriptynote_backup_${new Date().toISOString().split('T')[0]}.json`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
-                
-                console.log('Notes exported successfully');
-            } catch (error) {
-                console.error('Failed to export notes:', error);
-            }
-        }
-
-        // Expose functions for debugging
-        window.ScriptyNote = {
-            exportNotes,
-            saveNotes,
-            loadNotes,
-            validateNotes,
-            notes: () => notes,
-            version: DATA_VERSION
-        };
     </script>
 </body>
 </html>
