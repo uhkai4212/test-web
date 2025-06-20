@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ScriptyNote – Updated Reactions UI</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet"/>
+
+  <style>
+    :root {
+      --bg: #121212;
+      --card: rgba(30,30,30,0.8);
+      --accent: #bb86fc;
+      --accent-hover: #9a66e0;
+      --text: #e0e0e0;
+      --muted: #888;
+      --radius: 12px;
+      --gap: 1rem;
+      --anim-fast: 150ms;
+      --anim-med: 350ms;
+      --anim-slow: 600ms;
+    }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body {
+      font-family:'Inter',sans-serif;
+      background:var(--bg);
+      color:var(--text);
+      display:flex; min-height:100vh; overflow-x:hidden;
+    }
+    .sidebar {
+      flex:1; padding:var(--gap);
+      animation:slideIn var(--anim-med) ease both;
+    }
+    .search-bar {
+      width:100%; padding:0.6rem; margin-bottom:var(--gap);
+      border:1px solid #333; border-radius:var(--radius);
+      background:var(--card); color:var(--text);
+      transition:box-shadow var(--anim-med), border-color var(--anim-med);
+    }
+    .search-bar:focus {
+      outline:none; border-color:var(--accent);
+      box-shadow:0 0 6px var(--accent);
+    }
+    .notes-list { display:grid; gap:var(--gap); }
+    .note {
+      background:var(--card); padding:var(--gap);
+      border-radius:var(--radius);
+      box-shadow:0 4px 12px rgba(0,0,0,0.4);
+      cursor:pointer; opacity:0; transform:translateY(20px);
+      animation:fadeUp var(--anim-med) ease forwards;
+    }
+    .note:nth-child(odd)  { animation-delay:var(--anim-fast); }
+    .note:nth-child(even) { animation-delay:calc(var(--anim-fast)*2); }
+    .note:hover {
+      transform:translateY(-4px) scale(1.02);
+      box-shadow:0 6px 16px rgba(0,0,0,0.6);
+    }
+    .note-header {
+      display:flex; justify-content:space-between;
+      font-size:0.85rem; color:var(--muted); margin-bottom:0.5rem;
+    }
+    .note-content {
+      display:-webkit-box; -webkit-line-clamp:3;
+      -webkit-box-orient:vertical; overflow:hidden;
+      line-height:1.4; font-size:0.95rem;
+    }
+    .create-btn {
+      position:fixed; bottom:var(--gap); right:var(--gap);
+      padding:0.75rem 1.5rem; background:var(--accent);
+      color:#fff; border:none; border-radius:24px;
+      font-size:1rem; cursor:pointer;
+      box-shadow:0 4px 12px rgba(0,0,0,0.5);
+      animation:bounceIn var(--anim-med) ease both;
+      transition:transform var(--anim-fast),background var(--anim-fast);
+      z-index:10;
+    }
+    .create-btn:hover { background:var(--accent-hover); transform:scale(1.05); }
+    .create-btn:active{ transform:scale(0.95); }
+    .modal-backdrop {
+      position:fixed; inset:0; background:rgba(0,0,0,0.6);
+      display:none; align-items:center; justify-content:center;
+      animation:fadeIn var(--anim-med) ease both;
+    }
+    .modal {
+      background:var(--card); padding:var(--gap);
+      border-radius:var(--radius); width:90%;max-width:400px;
+      box-shadow:0 4px 16px rgba(0,0,0,0.5);
+      transform:scale(0.8);
+      animation:scaleIn var(--anim-med) ease var(--anim-fast) both;
+    }
+    .modal header {
+      display:flex; justify-content:space-between; align-items:center;
+      margin-bottom:var(--gap);
+    }
+    .close-btn {
+      background:none; border:none; font-size:1.5rem;
+      color:var(--muted); cursor:pointer;
+      transition:transform var(--anim-fast),color var(--anim-fast);
+    }
+    .close-btn:hover { transform:rotate(90deg); color:var(--text); }
+    /* —— NEW REACTIONS BAR —— */
+    .reactions {
+      display:flex; justify-content:space-around;
+      margin-bottom:var(--gap);
+    }
+    .reactions button {
+      background:none; border:none; color:var(--muted);
+      font-size:1.2rem; cursor:pointer;
+      display:flex; align-items:center;
+      transition:color var(--anim-fast),transform var(--anim-fast);
+    }
+    .reactions button span {
+      margin-left:0.4rem; font-size:0.9rem;
+    }
+    .reactions button.like:active {
+      animation:likeBounce var(--anim-fast) ease;
+    }
+    .reactions button.comment:active {
+      animation:commentShake var(--anim-fast) ease;
+    }
+    .reactions button.favorite {
+      position:relative;
+      transition:transform var(--anim-med),color var(--anim-fast);
+    }
+    .reactions button.favorite.favorited {
+      color:var(--accent);
+      animation:heartFlip var(--anim-slow) ease both;
+    }
+    /* —— COMMENTS SECTION —— */
+    .comments {
+      max-height:180px; overflow-y:auto; margin-bottom:var(--gap);
+      opacity:0; transform:translateY(-10px);
+      transition:opacity var(--anim-med),transform var(--anim-med);
+    }
+    .comments.visible {
+      opacity:1; transform:translateY(0);
+    }
+    .comment {
+      margin-bottom:0.5rem; font-size:0.85rem;
+    }
+    .comment strong { color:var(--accent); }
+
+    /* Comment form */
+    .comment-form textarea {
+      width:100%; padding:0.5rem; border-radius:var(--radius);
+      border:1px solid #333; background:var(--card); color:var(--text);
+      margin-bottom:var(--gap); transition:box-shadow var(--anim-fast);
+    }
+    .comment-form textarea:focus {
+      outline:none; box-shadow:0 0 6px var(--accent);
+    }
+    .submit-comment {
+      background:var(--accent); border:none; padding:0.5rem 1rem;
+      border-radius:var(--radius); color:#fff; cursor:pointer;
+      transition:transform var(--anim-fast);
+    }
+    .submit-comment:active { transform:scale(0.9); }
+
+    /* Keyframes */
+    @keyframes slideIn   { from{transform:translateX(-50%);opacity:0;} to{transform:none;opacity:1;} }
+    @keyframes fadeUp    { from{opacity:0;transform:translateY(20px);} to{opacity:1;transform:none;} }
+    @keyframes fadeIn    { from{opacity:0} to{opacity:1} }
+    @keyframes scaleIn   { from{transform:scale(0.8)} to{transform:scale(1)} }
+    @keyframes bounceIn  {
+      0%{transform:translateY(200%) scale(0.5);opacity:0;}
+      60%{transform:translateY(-20%) scale(1.1);opacity:1;}
+      to{transform:none;}
+    }
+    @keyframes likeBounce {
+      0%{transform:scale(1);} 50%{transform:scale(1.3);} to{transform:scale(1);}
+    }
+    @keyframes commentShake {
+      0%,100%{transform:rotate(0);} 25%{transform:rotate(-5deg);} 75%{transform:rotate(5deg);}
+    }
+    @keyframes heartFlip {
+      from{transform:rotateY(0);} to{transform:rotateY(360deg);}
+    }
+
+    @media (max-width:600px){
+      .sidebar{width:100%;}
+      .note{width:100% !important;}
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar">
+    <input id="searchBar" class="search-bar" placeholder="Search notes…" />
+    <div class="notes-list" id="notesList"></div>
+  </div>
+
+  <button class="create-btn" id="openCreate">Create Note</button>
+
+  <!-- Create Note Modal -->
+  <div class="modal-backdrop" id="createModal">
+    <div class="modal">
+      <header>
+        <h2>New Note</h2>
+        <button class="close-btn" id="closeCreate">&times;</button>
+      </header>
+      <form id="noteForm">
+        <div class="form-group">
+          <label>Your Name</label>
+          <input id="author" type="text" required/>
+        </div>
+        <div class="form-group">
+          <label>Note Content</label>
+          <textarea id="content" rows="4" required></textarea>
+        </div>
+        <button type="submit" class="submit-btn">Post Note</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Detail Modal -->
+  <div class="modal-backdrop" id="detailModal">
+    <div class="modal">
+      <header>
+        <h2>Note Details</h2>
+        <button class="close-btn" id="closeDetail">&times;</button>
+      </header>
+
+      <div class="note-full" id="detailContent"></div>
+
+      <div class="reactions">
+        <button class="like" id="likeBtn">👍<span id="likeCount">0</span></button>
+        <button class="comment" id="toggleComments">💬<span id="commentCount">0</span></button>
+        <button class="favorite" id="favorBtn">❤️</button>
+      </div>
+
+      <div class="comments" id="commentsList"></div>
+
+      <form id="commentForm" class="comment-form">
+        <textarea id="commentText" rows="2" placeholder="Your comment…" required></textarea>
+        <button type="submit" class="submit-comment">Comment</button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // DEMO DATA & STATE
+    const now = Date.now();
+    const demoNotes = Array.from({ length: 30 }, (_, i) => ({
+      id: i,
+      author: `User${i+1}`,
+      content: `[Demo #${i+1}] Lorem ipsum dolor sit amet.`,
+      timestamp: new Date(now - i*60000).toISOString()
+    }));
+    let filtered = [...demoNotes];
+    const comments = {}, favorites = new Set(), likes = {};
+    let currentId = null;
+
+    // ELEMENTS
+    const notesList    = document.getElementById('notesList');
+    const searchBar    = document.getElementById('searchBar');
+    const openCreate   = document.getElementById('openCreate');
+    const createModal  = document.getElementById('createModal');
+    const closeCreate  = document.getElementById('closeCreate');
+    const noteForm     = document.getElementById('noteForm');
+    const detailModal  = document.getElementById('detailModal');
+    const closeDetail  = document.getElementById('closeDetail');
+    const detailContent= document.getElementById('detailContent');
+    const likeBtn      = document.getElementById('likeBtn');
+    const likeCount    = document.getElementById('likeCount');
+    const toggleComments= document.getElementById('toggleComments');
+    const commentCount = document.getElementById('commentCount');
+    const favorBtn     = document.getElementById('favorBtn');
+    const commentsList = document.getElementById('commentsList');
+    const commentForm  = document.getElementById('commentForm');
+    const commentText  = document.getElementById('commentText');
+
+    // RENDER NOTES
+    function renderNotes(list) {
+      notesList.innerHTML = '';
+      if (!list.length) {
+        notesList.innerHTML = '<p style="color:var(--muted)">No notes found.</p>';
+        return;
+      }
+      list.forEach(n => {
+        const el = document.createElement('div');
+        el.className = 'note';
+        el.dataset.id = n.id;
+        el.innerHTML = `
+          <div class="note-header">
+            <span>${n.author}</span>
+            <time>${new Date(n.timestamp).toLocaleTimeString()}</time>
+          </div>
+          <div class="note-content">${n.content}</div>
+        `;
+        el.addEventListener('click', ()=> openDetail(n.id));
+        notesList.appendChild(el);
+      });
+    }
+
+    // SEARCH
+    searchBar.addEventListener('input', e=>{
+      const t = e.target.value.toLowerCase().trim();
+      filtered = demoNotes.filter(n=>
+        n.author.toLowerCase().includes(t) ||
+        n.content.toLowerCase().includes(t)
+      );
+      renderNotes(filtered);
+    });
+
+    // CREATE MODAL
+    openCreate.addEventListener('click', ()=> createModal.style.display='flex');
+    closeCreate.addEventListener('click', ()=> createModal.style.display='none');
+    createModal.addEventListener('click', e=> { if(e.target===createModal) createModal.style.display='none'; });
+
+    noteForm.addEventListener('submit', e=>{
+      e.preventDefault();
+      const a = document.getElementById('author').value.trim();
+      const c = document.getElementById('content').value.trim();
+      const id = demoNotes.length;
+      demoNotes.unshift({ id, author:a, content:c, timestamp:new Date().toISOString() });
+      filtered = demoNotes.slice();
+      renderNotes(filtered);
+      noteForm.reset();
+      createModal.style.display='none';
+    });
+
+    // DETAIL VIEW
+    function openDetail(id) {
+      currentId = id;
+      const n = demoNotes.find(x=>x.id==id);
+      detailContent.innerHTML = `
+        <div class="note-header">
+          <span>${n.author}</span>
+          <time>${new Date(n.timestamp).toLocaleString()}</time>
+        </div>
+        <p>${n.content}</p>`;
+      // likes
+      likes[id] = likes[id]||0;
+      likeCount.textContent = likes[id];
+      // comments
+      commentCount.textContent = (comments[id]||[]).length;
+      commentsList.classList.remove('visible');
+      // favorites
+      favorBtn.classList.toggle('favorited', favorites.has(id));
+      detailModal.style.display = 'flex';
+    }
+
+    // LIKE
+    likeBtn.addEventListener('click', ()=>{
+      likes[currentId] = (likes[currentId]||0) + 1;
+      likeCount.textContent = likes[currentId];
+    });
+
+    // TOGGLE COMMENTS
+    toggleComments.addEventListener('click', ()=>{
+      commentsList.classList.toggle('visible');
+      if (commentsList.classList.contains('visible')) {
+        renderComments();
+      }
+    });
+
+    // FAVORITE
+    favorBtn.addEventListener('click', ()=>{
+      favorites.has(currentId)? favorites.delete(currentId): favorites.add(currentId);
+      favorBtn.classList.toggle('favorited');
+    });
+
+    // COMMENTS
+    commentForm.addEventListener('submit', e=>{
+      e.preventDefault();
+      const t = commentText.value.trim();
+      if (!t) return;
+      comments[currentId] = comments[currentId]||[];
+      comments[currentId].push({ author:'You', text:t });
+      commentCount.textContent = comments[currentId].length;
+      commentText.value = '';
+      renderComments();
+    });
+    function renderComments() {
+      commentsList.innerHTML = '';
+      const arr = comments[currentId]||[];
+      if (!arr.length) {
+        commentsList.innerHTML = '<p style="color:var(--muted)">No comments.</p>';
+      } else {
+        arr.forEach(c=>{
+          const d = document.createElement('div');
+          d.className = 'comment';
+          d.innerHTML = `<strong>${c.author}:</strong> ${c.text}`;
+          commentsList.appendChild(d);
+        });
+      }
+    }
+
+    // CLOSE DETAIL
+    closeDetail.addEventListener('click', ()=> detailModal.style.display='none');
+    detailModal.addEventListener('click', e=> { if(e.target===detailModal) detailModal.style.display='none'; });
+
+    // INIT
+    renderNotes(filtered);
+  </script>
+</body>
+</html>
